@@ -8,11 +8,12 @@ import api, { RESTAURANT_ID } from '../services/api';
 import './LiveOrders.css';
 
 const STATUS_COLORS = {
-  placed:    '#f59e0b',
-  confirmed: '#3b82f6',
-  preparing: '#8b5cf6',
-  ready:     '#10b981',
-  completed: '#6b7280'
+  awaiting_payment: '#f59e0b',
+  placed:           '#f59e0b',
+  confirmed:        '#3b82f6',
+  preparing:        '#8b5cf6',
+  ready:            '#10b981',
+  completed:        '#6b7280'
 };
 
 function LiveOrders() {
@@ -21,9 +22,6 @@ function LiveOrders() {
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState({});
 
-  // ============================================
-  // Fetch orders
-  // ============================================
   const fetchOrders = async () => {
     try {
       const res = await api.get(`/api/order/live?restaurant_id=${RESTAURANT_ID}`);
@@ -42,9 +40,6 @@ function LiveOrders() {
     return () => clearInterval(interval);
   }, []);
 
-  // ============================================
-  // Socket.IO for real-time
-  // ============================================
   useEffect(() => {
     const socket = io(import.meta.env.VITE_API_URL, {
       transports: ['websocket', 'polling']
@@ -56,20 +51,18 @@ function LiveOrders() {
       setOrders(prev => [...prev, order]);
     });
 
-    socket.on('orderUpdate', () => {
-      fetchOrders();
-    });
+    socket.on('orderUpdate', () => fetchOrders());
 
     return () => socket.disconnect();
   }, []);
 
   // ============================================
-  // Settle cash handler
+  // STEP 2: Confirm Cash Payment
   // ============================================
   const handleSettleCash = async (orderId) => {
     const confirmed = window.confirm(
-      '💵 Confirm cash received & print bill?\n\n' +
-      'After this, customer tracking will start.'
+      '💵 Confirm cash payment received?\n\n' +
+      'Token will be generated. Customer will see "Payment Successful".'
     );
     if (!confirmed) return;
 
@@ -79,11 +72,8 @@ function LiveOrders() {
       const res = await api.patch(`/api/order/${orderId}/settle-cash`);
 
       if (res.data.success) {
-        alert('✅ Cash settled! Bill printed. Customer can now track.');
+        alert('✅ Payment confirmed! Now click "Print Bill".');
         await fetchOrders();
-
-        // Optional: trigger bill print
-        window.print();
       }
     } catch (err) {
       alert('❌ ' + (err.response?.data?.error || err.message));
@@ -93,17 +83,35 @@ function LiveOrders() {
   };
 
   // ============================================
-  // Status update handler
+  // STEP 3: Print Bill → Tracking ON
   // ============================================
-  const handleStatusChange = async (orderId, newStatus) => {
+  const handlePrintBill = async (orderId) => {
     setActionLoading(prev => ({ ...prev, [orderId]: true }));
 
+    try {
+      const res = await api.patch(`/api/order/${orderId}/print-bill`);
+
+      if (res.data.success) {
+        alert('✅ Bill printed! Customer tracking is now active.');
+        await fetchOrders();
+
+        // 🖨️ Print bill (browser)
+        setTimeout(() => window.print(), 500);
+      }
+    } catch (err) {
+      alert('❌ ' + (err.response?.data?.error || err.message));
+    } finally {
+      setActionLoading(prev => ({ ...prev, [orderId]: false }));
+    }
+  };
+
+  const handleStatusChange = async (orderId, newStatus) => {
+    setActionLoading(prev => ({ ...prev, [orderId]: true }));
     try {
       await api.patch(`/api/order/${orderId}/status`, { status: newStatus });
       await fetchOrders();
     } catch (err) {
-      const msg = err.response?.data?.error || err.message;
-      alert('❌ ' + msg);
+      alert('❌ ' + (err.response?.data?.error || err.message));
     } finally {
       setActionLoading(prev => ({ ...prev, [orderId]: false }));
     }
@@ -126,8 +134,13 @@ function LiveOrders() {
       <div className="lo-grid">
         {orders.map(order => {
           const isCash = order.payment_method === 'cash';
-          const isCashPending = isCash && !order.is_cash_settled;
+          const cashPending = isCash && !order.is_cash_settled;
+          const waitingBill = isCash && order.is_cash_settled && !order.tracking_enabled;
+          const trackingOn = order.tracking_enabled;
           const busy = actionLoading[order.id];
+
+          // Status buttons disabled logic
+          const statusLocked = isCash && !trackingOn;
 
           return (
             <div key={order.id} className="lo-card">
@@ -137,8 +150,7 @@ function LiveOrders() {
                   <h3>{order.token_number || order.order_number}</h3>
                   <span className="lo-time">
                     {new Date(order.created_at).toLocaleTimeString('en-IN', {
-                      hour: '2-digit',
-                      minute: '2-digit'
+                      hour: '2-digit', minute: '2-digit'
                     })}
                   </span>
                 </div>
@@ -146,11 +158,11 @@ function LiveOrders() {
                   className="lo-status"
                   style={{ background: STATUS_COLORS[order.status] || '#666' }}
                 >
-                  {order.status.toUpperCase()}
+                  {order.status.toUpperCase().replace('_', ' ')}
                 </span>
               </div>
 
-              {/* Customer info */}
+              {/* Customer */}
               <div className="lo-customer">
                 <p><strong>👤</strong> {order.customer_name}</p>
                 <p><strong>📱</strong> {order.customer_mobile}</p>
@@ -158,10 +170,10 @@ function LiveOrders() {
 
               {/* Items */}
               <div className="lo-items">
-                {order.items && order.items.map((item, i) => (
+                {(order.items || []).map((item, i) => (
                   <div key={i} className="lo-item">
-                    <span>{item.name} × {item.quantity}</span>
-                    <span>₹{item.price * item.quantity}</span>
+                    <span>{item.item_name || item.name} × {item.quantity}</span>
+                    <span>₹{item.total || (item.price * item.quantity)}</span>
                   </div>
                 ))}
               </div>
@@ -178,27 +190,55 @@ function LiveOrders() {
                 </span>
                 {isCash && (
                   <span className={order.is_cash_settled ? 'cash-ok' : 'cash-pending'}>
-                    {order.is_cash_settled ? '✅ Settled' : '⚠️ Pending'}
+                    {order.is_cash_settled ? '✅ Paid' : '⚠️ Unpaid'}
                   </span>
                 )}
               </div>
 
-              {/* 🚨 Actions */}
+              {/* Actions */}
               <div className="lo-actions">
-                {isCashPending && (
+
+                {/* STEP 1: Cash Pending → Confirm Cash Button */}
+                {cashPending && (
                   <button
-                    className="btn-cash-settle"
+                    className="btn-cash-confirm"
                     onClick={() => handleSettleCash(order.id)}
                     disabled={busy}
                   >
-                    {busy ? '⏳' : '💵 Cash Received & Print Bill'}
+                    {busy ? '⏳' : '💵 Confirm Cash Payment'}
                   </button>
                 )}
 
+                {/* STEP 2: Cash Confirmed → Print Bill Button */}
+                {waitingBill && (
+                  <button
+                    className="btn-print-bill"
+                    onClick={() => handlePrintBill(order.id)}
+                    disabled={busy}
+                  >
+                    {busy ? '⏳' : '🖨️ Print Bill'}
+                  </button>
+                )}
+
+                {/* Badges */}
+                {isCash && order.is_cash_settled && (
+                  <div className="badge-cash-paid">
+                    ✅ Payment Successful
+                  </div>
+                )}
+
+                {trackingOn && isCash && (
+                  <div className="badge-tracking-on">
+                    📊 Tracking Enabled
+                  </div>
+                )}
+
+                {/* Status Buttons — LOCKED if cash && !tracking_enabled */}
                 <button
                   className="btn-status btn-confirm"
                   onClick={() => handleStatusChange(order.id, 'confirmed')}
-                  disabled={busy || order.status !== 'placed'}
+                  disabled={busy || statusLocked || order.status !== 'placed'}
+                  title={statusLocked ? '🖨️ Print bill first' : ''}
                 >
                   Confirm
                 </button>
@@ -206,8 +246,8 @@ function LiveOrders() {
                 <button
                   className="btn-status btn-prepare"
                   onClick={() => handleStatusChange(order.id, 'preparing')}
-                  disabled={busy || isCashPending || order.status === 'preparing'}
-                  title={isCashPending ? 'Settle cash first' : ''}
+                  disabled={busy || statusLocked || order.status === 'preparing'}
+                  title={statusLocked ? '🖨️ Print bill first' : ''}
                 >
                   Preparing
                 </button>
@@ -215,7 +255,7 @@ function LiveOrders() {
                 <button
                   className="btn-status btn-ready"
                   onClick={() => handleStatusChange(order.id, 'ready')}
-                  disabled={busy || isCashPending || order.status === 'ready'}
+                  disabled={busy || statusLocked || order.status === 'ready'}
                 >
                   Ready
                 </button>
@@ -223,7 +263,7 @@ function LiveOrders() {
                 <button
                   className="btn-status btn-complete"
                   onClick={() => handleStatusChange(order.id, 'completed')}
-                  disabled={busy || isCashPending}
+                  disabled={busy || statusLocked}
                 >
                   Completed
                 </button>

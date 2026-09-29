@@ -42,7 +42,7 @@
 
 .lo-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 16px;
 }
 
@@ -63,9 +63,10 @@
 }
 
 .lo-card-header h3 {
-  font-size: 18px;
+  font-size: 20px;
   color: #111827;
   margin: 0;
+  letter-spacing: 1px;
 }
 
 .lo-time {
@@ -76,7 +77,7 @@
 .lo-status {
   padding: 4px 10px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: white;
   letter-spacing: 0.5px;
@@ -103,7 +104,7 @@
 .lo-item {
   display: flex;
   justify-content: space-between;
-  font-size: 14px;
+  font-size: 13px;
   color: #4b5563;
   padding: 3px 0;
 }
@@ -138,27 +139,11 @@
   font-weight: 600;
 }
 
-.lo-pay-badge.cash {
-  background: #fef3c7;
-  color: #92400e;
-}
+.lo-pay-badge.cash { background: #fef3c7; color: #92400e; }
+.lo-pay-badge.online { background: #dbeafe; color: #1e40af; }
 
-.lo-pay-badge.online {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.cash-ok {
-  color: #10b981;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.cash-pending {
-  color: #ef4444;
-  font-size: 12px;
-  font-weight: 700;
-}
+.cash-ok { color: #10b981; font-size: 12px; font-weight: 700; }
+.cash-pending { color: #ef4444; font-size: 12px; font-weight: 700; }
 
 /* ---- Actions ---- */
 .lo-actions {
@@ -170,7 +155,7 @@
 
 .btn-status {
   flex: 1 1 auto;
-  padding: 8px 12px;
+  padding: 8px 10px;
   border: none;
   border-radius: 6px;
   font-size: 12px;
@@ -195,8 +180,36 @@
   cursor: not-allowed;
 }
 
-/* ---- Cash Settle Button ---- */
-.btn-cash-settle {
+/* ---- Step 1: Confirm Cash Button ---- */
+.btn-cash-confirm {
+  flex: 1 1 100%;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 8px;
+  animation: pulse-blue 2s infinite;
+  transition: all 0.2s;
+}
+
+.btn-cash-confirm:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(59, 130, 246, 0.5);
+}
+
+.btn-cash-confirm:disabled { opacity: 0.6; cursor: not-allowed; }
+
+@keyframes pulse-blue {
+  0%, 100% { box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+  50%      { box-shadow: 0 4px 20px rgba(59, 130, 246, 0.8); }
+}
+
+/* ---- Step 2: Print Bill Button ---- */
+.btn-print-bill {
   flex: 1 1 100%;
   background: linear-gradient(135deg, #10b981, #059669);
   color: white;
@@ -211,17 +224,36 @@
   transition: all 0.2s;
 }
 
-.btn-cash-settle:hover:not(:disabled) {
+.btn-print-bill:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 6px 18px rgba(16, 185, 129, 0.5);
 }
 
-.btn-cash-settle:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
+.btn-print-bill:disabled { opacity: 0.6; cursor: not-allowed; }
 
 @keyframes pulse-green {
   0%, 100% { box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
   50%      { box-shadow: 0 4px 20px rgba(16, 185, 129, 0.8); }
+}
+
+/* ---- Badges ---- */
+.badge-cash-paid,
+.badge-tracking-on {
+  flex: 1 1 100%;
+  text-align: center;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.badge-cash-paid {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.badge-tracking-on {
+  background: #d1fae5;
+  color: #065f46;
 }
