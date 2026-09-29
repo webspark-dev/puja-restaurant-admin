@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { ordersAPI } from '../services/api';
 import { connectSocket } from '../services/socket';
-
+import { printBill } from '../utils/printBill';
 export default function Orders() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('live');
@@ -97,32 +97,35 @@ export default function Orders() {
     setConfirmModal({ type: 'print', order });
   };
 
-  const confirmPrintBill = async () => {
-    const order = confirmModal.order;
-    setConfirmModal(null);
-    setUpdatingId(order.id);
+ const confirmPrintBill = async () => {
+  const order = confirmModal.order;
+  setConfirmModal(null);
+  setUpdatingId(order.id);
 
-    try {
-      const res = await ordersAPI.printBill(order.id);
-      if (res.data.success) {
-        setTimeout(() => window.print(), 300);
-        setToast({
-          type: 'success',
-          message: `🖨️ ${order.token} — Bill Printed`
-        });
-        await loadData();
-      }
-    } catch (err) {
-      console.error('printBill error:', err);
+  try {
+    const res = await ordersAPI.printBill(order.id);
+    if (res.data.success) {
+      // ✅ Use clean bill printer instead of window.print()
+      setTimeout(() => {
+        printBill(res.data.order || order);
+      }, 300);
+
       setToast({
-        type: 'error',
-        message: err.response?.data?.error || 'Failed to print bill'
+        type: 'success',
+        message: `🖨️ ${order.token} — Bill Printed`
       });
-    } finally {
-      setUpdatingId(null);
+      await loadData();
     }
-  };
-
+  } catch (err) {
+    console.error('printBill error:', err);
+    setToast({
+      type: 'error',
+      message: err.response?.data?.error || 'Failed to print bill'
+    });
+  } finally {
+    setUpdatingId(null);
+  }
+};
   // ============================================
   // STEP 3: Update Status
   // ============================================
@@ -530,14 +533,14 @@ export default function Orders() {
 
       {/* Order Detail Modal */}
       {selectedOrder && (
-        <OrderDetailModal
-          order={selectedOrder}
-          onClose={() => setSelectedOrder(null)}
-          onPrint={() => {
-            setSelectedOrder(null);
-            handlePrintBill(selectedOrder);
-          }}
-        />
+       <OrderDetailModal
+  order={selectedOrder}
+  onClose={() => setSelectedOrder(null)}
+  onPrint={() => {
+    setSelectedOrder(null);
+    printBill(selectedOrder);   // ✅ Clean bill
+  }}
+/>
       )}
 
       {/* ============================================
