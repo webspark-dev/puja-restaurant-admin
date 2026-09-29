@@ -14,6 +14,8 @@ export default function Orders() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [toast, setToast] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
+  const [confirmModal, setConfirmModal] = useState(null);
+  // confirmModal structure: { type: 'cash' | 'print', order: {...} }
 
   useEffect(() => {
     loadData();
@@ -57,24 +59,19 @@ export default function Orders() {
   };
 
   // ============================================
-  // STEP 1: Confirm Cash Payment
+  // STEP 1: Open Confirm Cash Modal
   // ============================================
-  const handleCashPay = async (order) => {
-    const confirmed = window.confirm(
-      `💵 Confirm Cash Payment?\n\n` +
-      `Token: ${order.token}\n` +
-      `Customer: ${order.customer_name}\n` +
-      `Amount: ₹${order.total}\n\n` +
-      `Customer will see "Payment Successful".`
-    );
+  const handleCashPay = (order) => {
+    setConfirmModal({ type: 'cash', order });
+  };
 
-    if (!confirmed) return;
-
+  const confirmCashPayment = async () => {
+    const order = confirmModal.order;
+    setConfirmModal(null);
     setUpdatingId(order.id);
 
     try {
       const res = await ordersAPI.settleCash(order.id);
-
       if (res.data.success) {
         setToast({
           type: 'success',
@@ -94,30 +91,24 @@ export default function Orders() {
   };
 
   // ============================================
-  // STEP 2: Print Bill → Enable Status Buttons
+  // STEP 2: Open Print Bill Modal
   // ============================================
-  const handlePrintBill = async (order) => {
-    const confirmed = window.confirm(
-      `🖨️ Print Bill?\n\n` +
-      `Token: ${order.token}\n` +
-      `Amount: ₹${order.total}\n\n` +
-      `Customer tracking will start.`
-    );
+  const handlePrintBill = (order) => {
+    setConfirmModal({ type: 'print', order });
+  };
 
-    if (!confirmed) return;
-
+  const confirmPrintBill = async () => {
+    const order = confirmModal.order;
+    setConfirmModal(null);
     setUpdatingId(order.id);
 
     try {
       const res = await ordersAPI.printBill(order.id);
-
       if (res.data.success) {
-        // 🖨️ Open print dialog
         setTimeout(() => window.print(), 300);
-
         setToast({
           type: 'success',
-          message: `🖨️ ${order.token} — Bill Printed, Tracking ON`
+          message: `🖨️ ${order.token} — Bill Printed`
         });
         await loadData();
       }
@@ -292,24 +283,23 @@ export default function Orders() {
         displayOrders.map(order => {
           const isUpdating = updatingId === order.id;
 
-          // 🎯 3 States within same card
-          const isCashPending = 
+          // 3 States within same card
+          const isCashPending =
             order.payment_method === 'cash' &&
             order.is_cash_settled === false;
 
-          const waitingForBill = 
+          const waitingForBill =
             order.payment_method === 'cash' &&
             order.is_cash_settled === true &&
             order.tracking_enabled === false;
 
-          const trackingOn = 
-            order.payment_method !== 'cash' ||  // Online always tracking ON
+          const trackingOn =
+            order.payment_method !== 'cash' ||
             order.tracking_enabled === true;
 
-          const showStatusButtons = 
+          const showStatusButtons =
             order.payment_method !== 'cash' || trackingOn;
 
-          // Border color based on state
           const borderColor = isCashPending ? '#dc2626'
                             : waitingForBill ? '#2563eb'
                             : '#16a34a';
@@ -420,7 +410,7 @@ export default function Orders() {
                   👁️ View
                 </button>
 
-                {/* 🚨 STATE 1: Confirm Cash Payment */}
+                {/* STATE 1: Confirm Cash Payment */}
                 {isCashPending && (
                   <button
                     onClick={() => handleCashPay(order)}
@@ -444,7 +434,7 @@ export default function Orders() {
                   </button>
                 )}
 
-                {/* 🚨 STATE 2: Print Bill */}
+                {/* STATE 2: Print Bill */}
                 {waitingForBill && (
                   <button
                     onClick={() => handlePrintBill(order)}
@@ -468,7 +458,7 @@ export default function Orders() {
                   </button>
                 )}
 
-                {/* 🚨 STATE 3: Status Buttons (Only after tracking ON) */}
+                {/* STATE 3: Status Buttons */}
                 {showStatusButtons && order.status === 'CONFIRMED' && (
                   <button
                     onClick={() => handleUpdateStatus(order.id, 'PREPARING')}
@@ -543,8 +533,194 @@ export default function Orders() {
         <OrderDetailModal
           order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
-          onPrint={() => handlePrintBill(selectedOrder)}
+          onPrint={() => {
+            setSelectedOrder(null);
+            handlePrintBill(selectedOrder);
+          }}
         />
+      )}
+
+      {/* ============================================
+          🎯 Custom Confirm Modal (Cash / Print)
+         ============================================ */}
+      {confirmModal && (
+        <div
+          onClick={() => setConfirmModal(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 3000,
+            padding: '20px',
+            animation: 'fadeIn 0.15s ease-out'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#fff',
+              borderRadius: '20px',
+              maxWidth: '420px',
+              width: '100%',
+              overflow: 'hidden',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              animation: 'modalIn 0.25s ease-out'
+            }}
+          >
+            {/* Icon + Title */}
+            <div style={{
+              padding: '28px 24px 16px',
+              textAlign: 'center'
+            }}>
+              <div style={{
+                width: '72px',
+                height: '72px',
+                margin: '0 auto 16px',
+                borderRadius: '50%',
+                background: confirmModal.type === 'cash'
+                  ? 'linear-gradient(135deg, #dc2626, #b91c1c)'
+                  : 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '36px',
+                boxShadow: confirmModal.type === 'cash'
+                  ? '0 8px 24px rgba(220, 38, 38, 0.35)'
+                  : '0 8px 24px rgba(37, 99, 235, 0.35)',
+                animation: 'pulse 2s infinite'
+              }}>
+                {confirmModal.type === 'cash' ? '💵' : '🖨️'}
+              </div>
+
+              <h2 style={{
+                fontSize: '20px',
+                fontWeight: '800',
+                color: '#1a1a1a',
+                marginBottom: '8px'
+              }}>
+                {confirmModal.type === 'cash'
+                  ? 'Confirm Cash Payment?'
+                  : 'Print Bill?'}
+              </h2>
+
+              <p style={{
+                fontSize: '13px',
+                color: '#666',
+                lineHeight: 1.5,
+                marginBottom: '20px'
+              }}>
+                {confirmModal.type === 'cash'
+                  ? 'Customer will immediately see "Payment Successful".'
+                  : 'Bill will print and customer tracking will start.'}
+              </p>
+
+              {/* Order Info */}
+              <div style={{
+                background: '#f9fafb',
+                borderRadius: '12px',
+                padding: '16px',
+                textAlign: 'left'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  marginBottom: '8px',
+                  fontSize: '13px'
+                }}>
+                  <span style={{ color: '#666' }}>Token</span>
+                  <span style={{ fontWeight: '800', color: '#e23744', fontSize: '16px' }}>
+                    {confirmModal.order.token}
+                  </span>
+                </div>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  marginBottom: '8px',
+                  fontSize: '13px'
+                }}>
+                  <span style={{ color: '#666' }}>Customer</span>
+                  <span style={{ fontWeight: '600' }}>{confirmModal.order.customer_name}</span>
+                </div>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  marginBottom: '8px',
+                  fontSize: '13px'
+                }}>
+                  <span style={{ color: '#666' }}>Mobile</span>
+                  <span style={{ fontWeight: '600' }}>{confirmModal.order.customer_mobile}</span>
+                </div>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  paddingTop: '10px',
+                  borderTop: '1px dashed #ccc',
+                  fontSize: '15px'
+                }}>
+                  <span style={{ color: '#666' }}>Amount</span>
+                  <span style={{ fontWeight: '800', color: '#dc2626' }}>
+                    ₹{confirmModal.order.total}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div style={{
+              display: 'flex',
+              gap: '10px',
+              padding: '16px 24px 24px'
+            }}>
+              <button
+                onClick={() => setConfirmModal(null)}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  background: '#f0f0f0',
+                  color: '#333',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '14px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s'
+                }}
+              >
+                ❌ Cancel
+              </button>
+
+              <button
+                onClick={
+                  confirmModal.type === 'cash'
+                    ? confirmCashPayment
+                    : confirmPrintBill
+                }
+                style={{
+                  flex: 2,
+                  padding: '14px',
+                  background: confirmModal.type === 'cash'
+                    ? 'linear-gradient(135deg, #dc2626, #b91c1c)'
+                    : 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '14px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  boxShadow: confirmModal.type === 'cash'
+                    ? '0 4px 12px rgba(220, 38, 38, 0.4)'
+                    : '0 4px 12px rgba(37, 99, 235, 0.4)',
+                  transition: 'all 0.15s'
+                }}
+              >
+                {confirmModal.type === 'cash' ? '✅ Yes, Confirm' : '🖨️ Yes, Print'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Toast */}
@@ -561,8 +737,9 @@ export default function Orders() {
           fontSize: '14px',
           fontWeight: '700',
           boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
-          zIndex: 2000,
-          maxWidth: '90%'
+          zIndex: 4000,
+          maxWidth: '90%',
+          animation: 'slideUp 0.25s ease-out'
         }}>
           {toast.message}
         </div>
@@ -571,7 +748,19 @@ export default function Orders() {
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.85; transform: scale(1.02); }
+          50% { opacity: 0.85; transform: scale(1.05); }
+        }
+        @keyframes modalIn {
+          from { opacity: 0; transform: scale(0.9) translateY(20px); }
+          to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideUp {
+          from { transform: translate(-50%, 20px); opacity: 0; }
+          to { transform: translate(-50%, 0); opacity: 1; }
         }
       `}</style>
 
