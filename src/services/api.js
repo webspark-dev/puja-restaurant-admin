@@ -1,17 +1,48 @@
+// ============================================
+// frontend-admin/src/services/api.js
+// ============================================
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_URL = import.meta.env.VITE_API_URL || 'https://puja-restaurant-api.onrender.com';
+
+// 🔑 Restaurant ID from env or fallback
+export const RESTAURANT_ID = 
+  import.meta.env.VITE_RESTAURANT_ID || 
+  localStorage.getItem('restaurantId') || 
+  'b07af312-2c05-46c9-bf85-044e2620aacf';
 
 const api = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' }
 });
 
+// ============================================
+// Request Interceptor — Auto-inject token + restaurant_id
+// ============================================
 api.interceptors.request.use((config) => {
+  // 🔐 Admin token
   const token = localStorage.getItem('adminToken');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  // 🏪 Auto-add restaurant_id for GET requests that need it
+  if (config.method === 'get') {
+    const needsRestaurantId = [
+      '/api/admin/orders/live',
+      '/api/admin/orders/cash-pending',
+      '/api/admin/dashboard/stats',
+      '/api/admin/kitchen/orders',
+      '/api/admin/ordering/status',
+      '/api/reports/'
+    ].some(path => config.url.includes(path));
+
+    if (needsRestaurantId && !config.url.includes('restaurant_id')) {
+      const sep = config.url.includes('?') ? '&' : '?';
+      config.url += `${sep}restaurant_id=${RESTAURANT_ID}`;
+    }
+  }
+
   return config;
 });
 
@@ -31,6 +62,9 @@ api.interceptors.response.use(
 
 export default api;
 
+// ============================================
+// API Endpoints
+// ============================================
 export const authAPI = {
   login: (email, password) => api.post('/api/auth/login', { email, password }),
   me: () => api.get('/api/auth/me')
@@ -44,12 +78,16 @@ export const dashboardAPI = {
 export const ordersAPI = {
   live: () => api.get('/api/admin/orders/live'),
   cashPending: () => api.get('/api/admin/orders/cash-pending'),
-  history: (limit = 50, offset = 0) => 
+  history: (limit = 50, offset = 0) =>
     api.get(`/api/admin/orders/history?limit=${limit}&offset=${offset}`),
-  confirmCash: (orderId, cashReceived) => 
+  confirmCash: (orderId, cashReceived) =>
     api.post(`/api/admin/orders/${orderId}/confirm-cash`, { cash_received: cashReceived }),
-  updateStatus: (orderId, status, note) => 
-    api.patch(`/api/admin/orders/${orderId}/status`, { status, note }),
+  settleCash: (orderId) =>
+    api.patch(`/api/order/${orderId}/settle-cash`),
+  printBill: (orderId) =>
+    api.patch(`/api/order/${orderId}/print-bill`),
+  updateStatus: (orderId, status, note) =>
+    api.patch(`/api/order/${orderId}/status`, { status, note }),
   getBillUrl: (orderId) => `${API_URL}/api/admin/orders/${orderId}/bill`
 };
 
@@ -58,7 +96,7 @@ export const kitchenAPI = {
 };
 
 export const menuAPI = {
-  getMenu: () => api.get('/api/menu?restaurant_id=' + (localStorage.getItem('restaurantId') || 'b07af312-2c05-46c9-bf85-044e2620aacf')),
+  getMenu: () => api.get(`/api/menu?restaurant_id=${RESTAURANT_ID}`),
   getCategories: () => api.get('/api/menu/categories'),
   createCategory: (data) => api.post('/api/menu/categories', data),
   updateCategory: (id, data) => api.put(`/api/menu/categories/${id}`, data),
@@ -67,18 +105,14 @@ export const menuAPI = {
   updateItem: (id, data) => api.put(`/api/menu/items/${id}`, data),
   deleteItem: (id) => api.delete(`/api/menu/items/${id}`),
   toggleItem: (id) => api.patch(`/api/menu/items/${id}/toggle`),
-  
-  // Image upload
   uploadImage: (file, itemName) => {
     const formData = new FormData();
     formData.append('image', file);
     formData.append('item_name', itemName || 'item');
-    
     return api.post('/api/menu/upload-image', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
-  
   deleteImage: (imageUrl) => api.post('/api/menu/delete-image', { image_url: imageUrl })
 };
 
@@ -96,10 +130,10 @@ export const settingsAPI = {
   updateBusiness: (data) => api.put('/api/settings/business', data),
   profile: () => api.get('/api/settings/profile'),
   updateProfile: (data) => api.put('/api/settings/profile', data),
-  changePassword: (currentPassword, newPassword) => 
-    api.post('/api/settings/change-password', { 
-      current_password: currentPassword, 
-      new_password: newPassword 
+  changePassword: (currentPassword, newPassword) =>
+    api.post('/api/settings/change-password', {
+      current_password: currentPassword,
+      new_password: newPassword
     }),
   getStaff: () => api.get('/api/settings/staff'),
   createStaff: (data) => api.post('/api/settings/staff', data),
@@ -109,15 +143,13 @@ export const settingsAPI = {
 };
 
 export const orderingAPI = {
-  toggle: (enabled, pauseMessage) => 
+  toggle: (enabled, pauseMessage) =>
     api.post('/api/admin/ordering/toggle', { enabled, pause_message: pauseMessage }),
   status: () => api.get('/api/admin/ordering/status'),
   schedule: (data) => api.post('/api/admin/ordering/schedule', data)
 };
+
 export const backupAPI = {
   info: () => api.get('/api/backup/info'),
-  exportUrl: (from, to) => {
-    const baseURL = '';
-    return `${baseURL}/api/backup/export?from=${from}&to=${to}`;
-  }
+  exportUrl: (from, to) => `/api/backup/export?from=${from}&to=${to}`
 };
