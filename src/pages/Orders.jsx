@@ -47,7 +47,7 @@ export default function Orders() {
   }, [toast]);
 
   // ============================================
-  // ⌨️ Keyboard Shortcuts (Enter/Esc)
+  // ⌨️ Keyboard Shortcuts
   // ============================================
   useEffect(() => {
     if (!confirmModal) return;
@@ -108,7 +108,6 @@ export default function Orders() {
         });
         await loadData();
 
-        // Auto-open Print modal after 500ms
         setTimeout(() => {
           setConfirmModal({ type: 'print', order });
         }, 500);
@@ -139,7 +138,6 @@ export default function Orders() {
     try {
       const res = await ordersAPI.printBill(order.id);
       if (res.data.success) {
-        // Print 80mm bill
         setTimeout(() => {
           printBill(res.data.order || order);
         }, 300);
@@ -162,7 +160,7 @@ export default function Orders() {
   };
 
   // ============================================
-  // Print Bill from History (Direct - no API call)
+  // Print Bill from History (Direct)
   // ============================================
   const handlePrintHistoryBill = (order) => {
     printBill(order);
@@ -173,7 +171,7 @@ export default function Orders() {
   };
 
   // ============================================
-  // STEP 3: Update Status (Preparing → Ready → Completed)
+  // STEP 3: Update Status
   // ============================================
   const handleUpdateStatus = async (orderId, newStatus) => {
     const prevLiveOrders = [...liveOrders];
@@ -182,7 +180,6 @@ export default function Orders() {
 
     setUpdatingId(orderId);
 
-    // 🎯 Optimistic update: remove COMPLETED immediately from Live
     if (newStatus === 'COMPLETED') {
       setLiveOrders(prev => prev.filter(o => o.id !== orderId));
       setHistory(prev => [{ ...targetOrder, status: 'COMPLETED' }, ...prev]);
@@ -209,7 +206,6 @@ export default function Orders() {
     try {
       await ordersAPI.updateStatus(orderId, newStatus, notes[newStatus]);
 
-      // 🎯 Refresh BOTH lists after 1 second
       setTimeout(async () => {
         try {
           const [liveRes, historyRes] = await Promise.all([
@@ -237,14 +233,24 @@ export default function Orders() {
     }
   };
 
+  // ============================================
+  // 🎯 FILTERS (Case-insensitive + Safety)
+  // ============================================
+
+  // 🎯 LIVE: Exclude COMPLETED & CANCELLED (safety filter)
   const filteredLive = liveOrders.filter(o => {
+    const s = String(o.status || '').toUpperCase();
+    // Safety: never show completed/cancelled in Live
+    if (s === 'COMPLETED' || s === 'CANCELLED') return false;
+
     if (filter === 'all') return true;
-    return o.status === filter;
+    return s === filter.toUpperCase();
   });
 
+  // 🎯 HISTORY: Show all or filtered
   const filteredHistory = history.filter(o => {
     if (filter === 'all') return true;
-    return o.status === filter;
+    return String(o.status || '').toUpperCase() === filter.toUpperCase();
   });
 
   const displayOrders = activeTab === 'live' ? filteredLive : filteredHistory;
@@ -281,7 +287,7 @@ export default function Orders() {
             border: 'none', cursor: 'pointer'
           }}
         >
-          🔔 Live ({liveOrders.length})
+          🔔 Live ({filteredLive.length})
         </button>
         <button
           onClick={() => setActiveTab('history')}
@@ -352,7 +358,6 @@ export default function Orders() {
             filteredLive.map(order => {
               const isUpdating = updatingId === order.id;
 
-              // 🔑 State Determination
               const isCashPending =
                 order.payment_method === 'cash' &&
                 order.is_cash_settled === false;
@@ -386,7 +391,6 @@ export default function Orders() {
                     transition: 'opacity 0.15s'
                   }}
                 >
-                  {/* Header */}
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -438,7 +442,6 @@ export default function Orders() {
                     </div>
                   </div>
 
-                  {/* Info Row */}
                   <div style={{
                     display: 'flex',
                     gap: '12px',
@@ -456,7 +459,6 @@ export default function Orders() {
                     </span>
                   </div>
 
-                  {/* Actions */}
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
 
                     <button
@@ -474,7 +476,6 @@ export default function Orders() {
                       👁️ View
                     </button>
 
-                    {/* STATE 1: Confirm Cash */}
                     {isCashPending && (
                       <button
                         onClick={() => handleCashPay(order)}
@@ -495,7 +496,6 @@ export default function Orders() {
                       </button>
                     )}
 
-                    {/* STATE 2: Print Bill */}
                     {waitingForBill && (
                       <button
                         onClick={() => handlePrintBill(order)}
@@ -516,7 +516,6 @@ export default function Orders() {
                       </button>
                     )}
 
-                    {/* STATE 3: Status Buttons */}
                     {showStatusButtons && order.status === 'CONFIRMED' && (
                       <button
                         onClick={() => handleUpdateStatus(order.id, 'PREPARING')}
@@ -604,7 +603,6 @@ export default function Orders() {
                   borderLeft: '4px solid #6b7280'
                 }}
               >
-                {/* Header */}
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -652,7 +650,6 @@ export default function Orders() {
                   </div>
                 </div>
 
-                {/* Info */}
                 <div style={{
                   display: 'flex',
                   gap: '12px',
@@ -676,7 +673,6 @@ export default function Orders() {
                   </span>
                 </div>
 
-                {/* History Actions */}
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
                     onClick={() => setSelectedOrder(order)}
@@ -731,9 +727,7 @@ export default function Orders() {
         />
       )}
 
-      {/* ============================================
-          Custom Confirm Modal
-         ============================================ */}
+      {/* Custom Confirm Modal */}
       {confirmModal && (
         <div
           onClick={() => setConfirmModal(null)}
@@ -1059,7 +1053,6 @@ function OrderDetailModal({ order, onClose, onPrint }) {
           </div>
         </div>
 
-        {/* Items */}
         {order.items && order.items.length > 0 && (
           <div style={{
             marginTop: '16px',
@@ -1085,7 +1078,6 @@ function OrderDetailModal({ order, onClose, onPrint }) {
           </div>
         )}
 
-        {/* Totals */}
         <div style={{
           marginTop: '16px',
           paddingTop: '16px',
@@ -1113,7 +1105,6 @@ function OrderDetailModal({ order, onClose, onPrint }) {
           </div>
         </div>
 
-        {/* Print Button */}
         {(order.tracking_enabled || String(order.status).toUpperCase() === 'COMPLETED') && (
           <button
             onClick={onPrint}
