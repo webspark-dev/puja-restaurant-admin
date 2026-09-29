@@ -16,7 +16,6 @@ export default function Orders() {
   const [toast, setToast] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
   const [confirmModal, setConfirmModal] = useState(null);
-  // confirmModal: { type: 'cash' | 'print', order: {...} }
 
   // ============================================
   // Data Loading
@@ -48,7 +47,7 @@ export default function Orders() {
   }, [toast]);
 
   // ============================================
-  // ⌨️ Keyboard Shortcuts for Confirm Modal
+  // ⌨️ Keyboard Shortcuts (Enter/Esc)
   // ============================================
   useEffect(() => {
     if (!confirmModal) return;
@@ -82,14 +81,14 @@ export default function Orders() {
       setLiveOrders(liveRes.data.orders || []);
       setHistory(historyRes.data.orders || []);
     } catch (err) {
-      console.error(err);
+      console.error('loadData error:', err);
     } finally {
       setLoading(false);
     }
   };
 
   // ============================================
-  // STEP 1: Open Confirm Cash Modal
+  // STEP 1: Cash Payment Confirm
   // ============================================
   const handleCashPay = (order) => {
     setConfirmModal({ type: 'cash', order });
@@ -105,11 +104,11 @@ export default function Orders() {
       if (res.data.success) {
         setToast({
           type: 'success',
-          message: `✅ ${order.token} — Payment Confirmed! Now print bill.`
+          message: `✅ ${order.token} — Payment Confirmed!`
         });
         await loadData();
 
-        // 🎯 Auto-open Print Bill Modal after 500ms
+        // Auto-open Print modal after 500ms
         setTimeout(() => {
           setConfirmModal({ type: 'print', order });
         }, 500);
@@ -126,7 +125,7 @@ export default function Orders() {
   };
 
   // ============================================
-  // STEP 2: Open Print Bill Modal
+  // STEP 2: Print Bill
   // ============================================
   const handlePrintBill = (order) => {
     setConfirmModal({ type: 'print', order });
@@ -140,7 +139,7 @@ export default function Orders() {
     try {
       const res = await ordersAPI.printBill(order.id);
       if (res.data.success) {
-        // ✅ Clean 80mm bill print
+        // Print 80mm bill
         setTimeout(() => {
           printBill(res.data.order || order);
         }, 300);
@@ -163,7 +162,18 @@ export default function Orders() {
   };
 
   // ============================================
-  // STEP 3: Update Status
+  // Print Bill from History (Direct - no API call)
+  // ============================================
+  const handlePrintHistoryBill = (order) => {
+    printBill(order);
+    setToast({
+      type: 'success',
+      message: `🖨️ ${order.token} — Printing bill...`
+    });
+  };
+
+  // ============================================
+  // STEP 3: Update Status (Preparing → Ready → Completed)
   // ============================================
   const handleUpdateStatus = async (orderId, newStatus) => {
     const prevLiveOrders = [...liveOrders];
@@ -172,6 +182,7 @@ export default function Orders() {
 
     setUpdatingId(orderId);
 
+    // 🎯 Optimistic update: remove COMPLETED immediately from Live
     if (newStatus === 'COMPLETED') {
       setLiveOrders(prev => prev.filter(o => o.id !== orderId));
       setHistory(prev => [{ ...targetOrder, status: 'COMPLETED' }, ...prev]);
@@ -197,14 +208,29 @@ export default function Orders() {
 
     try {
       await ordersAPI.updateStatus(orderId, newStatus, notes[newStatus]);
-      setTimeout(() => {
-        ordersAPI.live().then(res => setLiveOrders(res.data.orders || [])).catch(() => {});
-      }, 1500);
+
+      // 🎯 Refresh BOTH lists after 1 second
+      setTimeout(async () => {
+        try {
+          const [liveRes, historyRes] = await Promise.all([
+            ordersAPI.live(),
+            ordersAPI.history(50, 0)
+          ]);
+          setLiveOrders(liveRes.data.orders || []);
+          setHistory(historyRes.data.orders || []);
+        } catch (e) {
+          console.error('Refresh failed:', e);
+        }
+      }, 1000);
     } catch (err) {
+      console.error('❌ Status update failed:', err);
       setLiveOrders(prevLiveOrders);
       setToast({
         type: 'error',
-        message: err.response?.data?.message || err.response?.data?.error || 'Update failed'
+        message: err.response?.data?.error
+              || err.response?.data?.message
+              || err.message
+              || 'Update failed'
       });
     } finally {
       setUpdatingId(null);
@@ -307,241 +333,390 @@ export default function Orders() {
         ))}
       </div>
 
-      {/* Orders List */}
-      {displayOrders.length === 0 ? (
-        <div style={{
-          background: '#fff',
-          borderRadius: '14px',
-          padding: '60px 20px',
-          textAlign: 'center',
-          color: '#999'
-        }}>
-          {activeTab === 'live' ? 'No live orders' : 'No orders in history'}
-        </div>
-      ) : (
-        displayOrders.map(order => {
-          const isUpdating = updatingId === order.id;
+      {/* ============================================
+          LIVE TAB
+         ============================================ */}
+      {activeTab === 'live' && (
+        <>
+          {filteredLive.length === 0 ? (
+            <div style={{
+              background: '#fff',
+              borderRadius: '14px',
+              padding: '60px 20px',
+              textAlign: 'center',
+              color: '#999'
+            }}>
+              No live orders
+            </div>
+          ) : (
+            filteredLive.map(order => {
+              const isUpdating = updatingId === order.id;
 
-          const isCashPending =
-            order.payment_method === 'cash' &&
-            order.is_cash_settled === false;
+              // 🔑 State Determination
+              const isCashPending =
+                order.payment_method === 'cash' &&
+                order.is_cash_settled === false;
 
-          const waitingForBill =
-            order.payment_method === 'cash' &&
-            order.is_cash_settled === true &&
-            order.tracking_enabled === false;
+              const waitingForBill =
+                order.payment_method === 'cash' &&
+                order.is_cash_settled === true &&
+                order.tracking_enabled === false;
 
-          const trackingOn =
-            order.payment_method !== 'cash' ||
-            order.tracking_enabled === true;
+              const trackingOn =
+                order.payment_method !== 'cash' ||
+                order.tracking_enabled === true;
 
-          const showStatusButtons =
-            order.payment_method !== 'cash' || trackingOn;
+              const showStatusButtons = trackingOn;
 
-          const borderColor = isCashPending ? '#dc2626'
-                            : waitingForBill ? '#2563eb'
-                            : '#16a34a';
+              const borderColor = isCashPending ? '#dc2626'
+                                : waitingForBill ? '#2563eb'
+                                : '#16a34a';
 
-          return (
-            <div
-              key={order.id}
-              style={{
-                background: '#fff',
-                borderRadius: '14px',
-                padding: '16px',
-                marginBottom: '12px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                borderLeft: `4px solid ${borderColor}`,
-                opacity: isUpdating ? 0.5 : 1,
-                transition: 'opacity 0.15s'
-              }}
-            >
-              {/* Header */}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                marginBottom: '12px'
-              }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                    <div style={{ fontSize: '20px', fontWeight: '900', color: '#e23744' }}>
-                      {order.token}
-                    </div>
-                    <StatusBadge status={order.status} />
-
-                    {order.is_cash_settled && order.payment_method === 'cash' && (
-                      <span style={{
-                        background: '#dcfce7', color: '#16a34a',
-                        padding: '3px 8px', borderRadius: '20px',
-                        fontSize: '11px', fontWeight: '700'
-                      }}>
-                        ✅ Paid
-                      </span>
-                    )}
-
-                    {trackingOn && order.payment_method === 'cash' && (
-                      <span style={{
-                        background: '#dbeafe', color: '#1e40af',
-                        padding: '3px 8px', borderRadius: '20px',
-                        fontSize: '11px', fontWeight: '700'
-                      }}>
-                        📊 Tracking
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#666' }}>
-                    {order.customer_name} • {order.customer_mobile}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{
-                    fontSize: '18px',
-                    fontWeight: '800',
-                    color: isCashPending ? '#dc2626' : '#1a1a1a'
-                  }}>
-                    ₹{order.total}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#666' }}>
-                    {order.order_type === 'dinein' ? '🍽️ Dine-in' : '🥡 Takeaway'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Info Row */}
-              <div style={{
-                display: 'flex',
-                gap: '12px',
-                fontSize: '12px',
-                color: '#666',
-                paddingBottom: '12px',
-                borderBottom: '1px solid #f0f0f0',
-                marginBottom: '12px',
-                flexWrap: 'wrap'
-              }}>
-                <span>{order.payment_method === 'upi' ? '📱 UPI' : '💵 Cash'}</span>
-                <span>{order.payment_status === 'PAID' || order.is_cash_settled ? '✅ Paid' : '⏳ Pending'}</span>
-                <span>
-                  🕐 {new Date(order.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-
-                <button
-                  onClick={() => setSelectedOrder(order)}
-                  disabled={isUpdating}
+              return (
+                <div
+                  key={order.id}
                   style={{
-                    flex: 1, padding: '10px',
-                    background: '#f0f0f0', color: '#333',
-                    borderRadius: '8px', fontSize: '13px',
-                    fontWeight: '700', border: 'none',
-                    cursor: isUpdating ? 'not-allowed' : 'pointer',
-                    minWidth: '80px'
+                    background: '#fff',
+                    borderRadius: '14px',
+                    padding: '16px',
+                    marginBottom: '12px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                    borderLeft: `4px solid ${borderColor}`,
+                    opacity: isUpdating ? 0.5 : 1,
+                    transition: 'opacity 0.15s'
                   }}
                 >
-                  👁️ View
-                </button>
+                  {/* Header */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    marginBottom: '12px'
+                  }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: '20px', fontWeight: '900', color: '#e23744' }}>
+                          {order.token}
+                        </div>
+                        <StatusBadge status={order.status} />
 
-                {/* STATE 1: Confirm Cash */}
-                {isCashPending && (
-                  <button
-                    onClick={() => handleCashPay(order)}
-                    disabled={isUpdating}
-                    style={{
-                      flex: 2, padding: '10px',
-                      background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
-                      color: '#fff', borderRadius: '8px',
-                      fontSize: '13px', fontWeight: '800',
-                      border: 'none',
-                      cursor: isUpdating ? 'not-allowed' : 'pointer',
-                      animation: 'pulse 2s infinite',
-                      boxShadow: '0 4px 12px rgba(220, 38, 38, 0.4)',
-                      minWidth: '180px'
-                    }}
-                  >
-                    {isUpdating ? '⏳ Processing...' : '💵 Confirm Cash Payment'}
-                  </button>
-                )}
+                        {order.is_cash_settled && order.payment_method === 'cash' && (
+                          <span style={{
+                            background: '#dcfce7', color: '#16a34a',
+                            padding: '3px 8px', borderRadius: '20px',
+                            fontSize: '11px', fontWeight: '700'
+                          }}>
+                            ✅ Paid
+                          </span>
+                        )}
 
-                {/* STATE 2: Print Bill */}
-                {waitingForBill && (
-                  <button
-                    onClick={() => handlePrintBill(order)}
-                    disabled={isUpdating}
-                    style={{
-                      flex: 2, padding: '10px',
-                      background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-                      color: '#fff', borderRadius: '8px',
-                      fontSize: '13px', fontWeight: '800',
-                      border: 'none',
-                      cursor: isUpdating ? 'not-allowed' : 'pointer',
-                      animation: 'pulse 2s infinite',
-                      boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)',
-                      minWidth: '180px'
-                    }}
-                  >
-                    {isUpdating ? '⏳ Printing...' : '🖨️ Print Bill'}
-                  </button>
-                )}
+                        {trackingOn && order.payment_method === 'cash' && (
+                          <span style={{
+                            background: '#dbeafe', color: '#1e40af',
+                            padding: '3px 8px', borderRadius: '20px',
+                            fontSize: '11px', fontWeight: '700'
+                          }}>
+                            📊 Tracking
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#666' }}>
+                        {order.customer_name} • {order.customer_mobile}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{
+                        fontSize: '18px',
+                        fontWeight: '800',
+                        color: isCashPending ? '#dc2626' : '#1a1a1a'
+                      }}>
+                        ₹{order.total}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#666' }}>
+                        {order.order_type === 'dinein' ? '🍽️ Dine-in' : '🥡 Takeaway'}
+                      </div>
+                    </div>
+                  </div>
 
-                {/* STATE 3: Status Buttons */}
-                {showStatusButtons && order.status === 'CONFIRMED' && (
-                  <button
-                    onClick={() => handleUpdateStatus(order.id, 'PREPARING')}
-                    disabled={isUpdating}
-                    style={{
-                      flex: 2, padding: '10px',
-                      background: '#2563eb', color: '#fff',
-                      borderRadius: '8px', fontSize: '13px',
-                      fontWeight: '700', border: 'none',
-                      cursor: isUpdating ? 'not-allowed' : 'pointer',
-                      minWidth: '140px'
-                    }}
-                  >
-                    👨‍🍳 Start Preparing
-                  </button>
-                )}
+                  {/* Info Row */}
+                  <div style={{
+                    display: 'flex',
+                    gap: '12px',
+                    fontSize: '12px',
+                    color: '#666',
+                    paddingBottom: '12px',
+                    borderBottom: '1px solid #f0f0f0',
+                    marginBottom: '12px',
+                    flexWrap: 'wrap'
+                  }}>
+                    <span>{order.payment_method === 'upi' ? '📱 UPI' : '💵 Cash'}</span>
+                    <span>{order.payment_status === 'PAID' || order.is_cash_settled ? '✅ Paid' : '⏳ Pending'}</span>
+                    <span>
+                      🕐 {new Date(order.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
 
-                {showStatusButtons && order.status === 'PREPARING' && (
-                  <button
-                    onClick={() => handleUpdateStatus(order.id, 'READY')}
-                    disabled={isUpdating}
-                    style={{
-                      flex: 2, padding: '10px',
-                      background: '#16a34a', color: '#fff',
-                      borderRadius: '8px', fontSize: '13px',
-                      fontWeight: '700', border: 'none',
-                      cursor: isUpdating ? 'not-allowed' : 'pointer',
-                      minWidth: '140px'
-                    }}
-                  >
-                    ✅ Mark Ready
-                  </button>
-                )}
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
 
-                {showStatusButtons && order.status === 'READY' && (
-                  <button
-                    onClick={() => handleUpdateStatus(order.id, 'COMPLETED')}
-                    disabled={isUpdating}
-                    style={{
-                      flex: 2, padding: '10px',
-                      background: '#16a34a', color: '#fff',
-                      borderRadius: '8px', fontSize: '13px',
-                      fontWeight: '700', border: 'none',
-                      cursor: isUpdating ? 'not-allowed' : 'pointer',
-                      minWidth: '140px'
-                    }}
-                  >
-                    ✓ Complete Order
-                  </button>
-                )}
+                    <button
+                      onClick={() => setSelectedOrder(order)}
+                      disabled={isUpdating}
+                      style={{
+                        flex: 1, padding: '10px',
+                        background: '#f0f0f0', color: '#333',
+                        borderRadius: '8px', fontSize: '13px',
+                        fontWeight: '700', border: 'none',
+                        cursor: isUpdating ? 'not-allowed' : 'pointer',
+                        minWidth: '80px'
+                      }}
+                    >
+                      👁️ View
+                    </button>
 
-              </div>
+                    {/* STATE 1: Confirm Cash */}
+                    {isCashPending && (
+                      <button
+                        onClick={() => handleCashPay(order)}
+                        disabled={isUpdating}
+                        style={{
+                          flex: 2, padding: '10px',
+                          background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
+                          color: '#fff', borderRadius: '8px',
+                          fontSize: '13px', fontWeight: '800',
+                          border: 'none',
+                          cursor: isUpdating ? 'not-allowed' : 'pointer',
+                          animation: 'pulse 2s infinite',
+                          boxShadow: '0 4px 12px rgba(220, 38, 38, 0.4)',
+                          minWidth: '180px'
+                        }}
+                      >
+                        {isUpdating ? '⏳ Processing...' : '💵 Confirm Cash Payment'}
+                      </button>
+                    )}
+
+                    {/* STATE 2: Print Bill */}
+                    {waitingForBill && (
+                      <button
+                        onClick={() => handlePrintBill(order)}
+                        disabled={isUpdating}
+                        style={{
+                          flex: 2, padding: '10px',
+                          background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                          color: '#fff', borderRadius: '8px',
+                          fontSize: '13px', fontWeight: '800',
+                          border: 'none',
+                          cursor: isUpdating ? 'not-allowed' : 'pointer',
+                          animation: 'pulse 2s infinite',
+                          boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)',
+                          minWidth: '180px'
+                        }}
+                      >
+                        {isUpdating ? '⏳ Printing...' : '🖨️ Print Bill'}
+                      </button>
+                    )}
+
+                    {/* STATE 3: Status Buttons */}
+                    {showStatusButtons && order.status === 'CONFIRMED' && (
+                      <button
+                        onClick={() => handleUpdateStatus(order.id, 'PREPARING')}
+                        disabled={isUpdating}
+                        style={{
+                          flex: 2, padding: '10px',
+                          background: '#2563eb', color: '#fff',
+                          borderRadius: '8px', fontSize: '13px',
+                          fontWeight: '700', border: 'none',
+                          cursor: isUpdating ? 'not-allowed' : 'pointer',
+                          minWidth: '140px'
+                        }}
+                      >
+                        👨‍🍳 Start Preparing
+                      </button>
+                    )}
+
+                    {showStatusButtons && order.status === 'PREPARING' && (
+                      <button
+                        onClick={() => handleUpdateStatus(order.id, 'READY')}
+                        disabled={isUpdating}
+                        style={{
+                          flex: 2, padding: '10px',
+                          background: '#16a34a', color: '#fff',
+                          borderRadius: '8px', fontSize: '13px',
+                          fontWeight: '700', border: 'none',
+                          cursor: isUpdating ? 'not-allowed' : 'pointer',
+                          minWidth: '140px'
+                        }}
+                      >
+                        ✅ Mark Ready
+                      </button>
+                    )}
+
+                    {showStatusButtons && order.status === 'READY' && (
+                      <button
+                        onClick={() => handleUpdateStatus(order.id, 'COMPLETED')}
+                        disabled={isUpdating}
+                        style={{
+                          flex: 2, padding: '10px',
+                          background: '#16a34a', color: '#fff',
+                          borderRadius: '8px', fontSize: '13px',
+                          fontWeight: '700', border: 'none',
+                          cursor: isUpdating ? 'not-allowed' : 'pointer',
+                          minWidth: '140px'
+                        }}
+                      >
+                        ✓ Complete Order
+                      </button>
+                    )}
+
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </>
+      )}
+
+      {/* ============================================
+          HISTORY TAB
+         ============================================ */}
+      {activeTab === 'history' && (
+        <>
+          {filteredHistory.length === 0 ? (
+            <div style={{
+              background: '#fff',
+              borderRadius: '14px',
+              padding: '60px 20px',
+              textAlign: 'center',
+              color: '#999'
+            }}>
+              No orders in history
             </div>
-          );
-        })
+          ) : (
+            filteredHistory.map(order => (
+              <div
+                key={order.id}
+                style={{
+                  background: '#fff',
+                  borderRadius: '14px',
+                  padding: '16px',
+                  marginBottom: '12px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                  borderLeft: '4px solid #6b7280'
+                }}
+              >
+                {/* Header */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  marginBottom: '12px'
+                }}>
+                  <div>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginBottom: '4px',
+                      flexWrap: 'wrap'
+                    }}>
+                      <div style={{ fontSize: '20px', fontWeight: '900', color: '#e23744' }}>
+                        {order.token}
+                      </div>
+                      <StatusBadge status={order.status} />
+                      <span style={{
+                        background: order.payment_method === 'cash' ? '#fef3c7' : '#dbeafe',
+                        color: order.payment_method === 'cash' ? '#92400e' : '#1e40af',
+                        padding: '3px 8px',
+                        borderRadius: '20px',
+                        fontSize: '11px',
+                        fontWeight: '700'
+                      }}>
+                        {order.payment_method === 'cash' ? '💵 Cash' : '📱 UPI'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#666' }}>
+                      {order.customer_name} • {order.customer_mobile}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{
+                      fontSize: '18px',
+                      fontWeight: '800',
+                      color: '#1a1a1a'
+                    }}>
+                      ₹{order.total}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#666' }}>
+                      {order.order_type === 'dinein' ? '🍽️ Dine-in' : '🥡 Takeaway'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Info */}
+                <div style={{
+                  display: 'flex',
+                  gap: '12px',
+                  fontSize: '12px',
+                  color: '#666',
+                  paddingBottom: '12px',
+                  borderBottom: '1px solid #f0f0f0',
+                  marginBottom: '12px',
+                  flexWrap: 'wrap'
+                }}>
+                  <span>
+                    🕐 {new Date(order.created_at).toLocaleString('en-IN', {
+                      day: '2-digit',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                  <span style={{ color: '#16a34a', fontWeight: '700' }}>
+                    ✅ Paid
+                  </span>
+                </div>
+
+                {/* History Actions */}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={() => setSelectedOrder(order)}
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      background: '#f0f0f0',
+                      color: '#333',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      border: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    👁️ View Details
+                  </button>
+
+                  <button
+                    onClick={() => handlePrintHistoryBill(order)}
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                      color: '#fff',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      border: 'none',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3)'
+                    }}
+                  >
+                    🖨️ Print Bill
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </>
       )}
 
       {/* Order Detail Modal */}
@@ -551,13 +726,13 @@ export default function Orders() {
           onClose={() => setSelectedOrder(null)}
           onPrint={() => {
             setSelectedOrder(null);
-            handlePrintBill(selectedOrder);
+            handlePrintHistoryBill(selectedOrder);
           }}
         />
       )}
 
       {/* ============================================
-          🎯 Custom Confirm Modal (Cash / Print)
+          Custom Confirm Modal
          ============================================ */}
       {confirmModal && (
         <div
@@ -586,7 +761,6 @@ export default function Orders() {
               animation: 'modalIn 0.25s ease-out'
             }}
           >
-            {/* Icon + Title */}
             <div style={{ padding: '28px 24px 16px', textAlign: 'center' }}>
               <div style={{
                 width: '72px',
@@ -663,7 +837,6 @@ export default function Orders() {
               </div>
             </div>
 
-            {/* Keyboard Hint */}
             <div style={{
               padding: '0 24px 8px',
               textAlign: 'center',
@@ -693,7 +866,6 @@ export default function Orders() {
               to cancel
             </div>
 
-            {/* Buttons */}
             <div style={{ display: 'flex', gap: '10px', padding: '8px 24px 24px' }}>
               <button
                 onClick={() => setConfirmModal(null)}
@@ -784,25 +956,26 @@ export default function Orders() {
 // Status Badge
 // ============================================
 function StatusBadge({ status }) {
+  const s = String(status || '').toUpperCase();
   const map = {
-    CONFIRMED: { bg: '#fef3c7', color: '#b45309', label: 'Confirmed' },
-    PREPARING: { bg: '#dbeafe', color: '#1e40af', label: 'Preparing' },
-    READY: { bg: '#dcfce7', color: '#16a34a', label: 'Ready' },
-    COMPLETED: { bg: '#e5e7eb', color: '#374151', label: 'Done' },
+    CONFIRMED:       { bg: '#fef3c7', color: '#b45309', label: 'Confirmed' },
+    PREPARING:       { bg: '#dbeafe', color: '#1e40af', label: 'Preparing' },
+    READY:           { bg: '#dcfce7', color: '#16a34a', label: 'Ready' },
+    COMPLETED:       { bg: '#e5e7eb', color: '#374151', label: 'Done' },
     PENDING_PAYMENT: { bg: '#fee2e2', color: '#dc2626', label: '💵 Cash Pending' },
-    CANCELLED: { bg: '#f3f4f6', color: '#6b7280', label: 'Cancelled' }
+    CANCELLED:       { bg: '#f3f4f6', color: '#6b7280', label: 'Cancelled' }
   };
-  const s = map[status] || map.PENDING_PAYMENT;
+  const info = map[s] || map.PENDING_PAYMENT;
   return (
     <span style={{
-      background: s.bg,
-      color: s.color,
+      background: info.bg,
+      color: info.color,
       padding: '3px 10px',
       borderRadius: '20px',
       fontSize: '11px',
       fontWeight: '700'
     }}>
-      {s.label}
+      {info.label}
     </span>
   );
 }
@@ -886,6 +1059,33 @@ function OrderDetailModal({ order, onClose, onPrint }) {
           </div>
         </div>
 
+        {/* Items */}
+        {order.items && order.items.length > 0 && (
+          <div style={{
+            marginTop: '16px',
+            paddingTop: '16px',
+            borderTop: '1px solid #e5e5e5'
+          }}>
+            <h3 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '8px' }}>
+              Items
+            </h3>
+            {order.items.map((item, i) => (
+              <div key={i} style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: '13px',
+                padding: '4px 0'
+              }}>
+                <span>{item.item_name || item.name} × {item.quantity}</span>
+                <span style={{ fontWeight: '600' }}>
+                  ₹{item.total || (item.price * item.quantity)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Totals */}
         <div style={{
           marginTop: '16px',
           paddingTop: '16px',
@@ -913,7 +1113,8 @@ function OrderDetailModal({ order, onClose, onPrint }) {
           </div>
         </div>
 
-        {order.tracking_enabled && (
+        {/* Print Button */}
+        {(order.tracking_enabled || String(order.status).toUpperCase() === 'COMPLETED') && (
           <button
             onClick={onPrint}
             style={{
