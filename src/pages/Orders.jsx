@@ -105,9 +105,14 @@ export default function Orders() {
       if (res.data.success) {
         setToast({
           type: 'success',
-          message: `✅ ${order.token} — Payment Confirmed!`
+          message: `✅ ${order.token} — Payment Confirmed! Now print bill.`
         });
         await loadData();
+
+        // 🎯 Auto-open Print Bill Modal after 500ms
+        setTimeout(() => {
+          setConfirmModal({ type: 'print', order });
+        }, 500);
       }
     } catch (err) {
       console.error('settleCash error:', err);
@@ -142,7 +147,7 @@ export default function Orders() {
 
         setToast({
           type: 'success',
-          message: `🖨️ ${order.token} — Bill Printed`
+          message: `🖨️ ${order.token} — Bill Printed, Tracking ON`
         });
         await loadData();
       }
@@ -552,7 +557,7 @@ export default function Orders() {
       )}
 
       {/* ============================================
-          🎯 Custom Confirm Modal
+          🎯 Custom Confirm Modal (Cash / Print)
          ============================================ */}
       {confirmModal && (
         <div
