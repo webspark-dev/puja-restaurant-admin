@@ -147,7 +147,7 @@ function LiveOrders() {
               {/* Header */}
               <div className="lo-card-header">
                 <div>
-                  <h3>{order.token_number || order.order_number}</h3>
+                  <h3>{order.token || order.order_number}</h3>
                   <span className="lo-time">
                     {new Date(order.created_at).toLocaleTimeString('en-IN', {
                       hour: '2-digit', minute: '2-digit'
@@ -181,7 +181,7 @@ function LiveOrders() {
               {/* Total + Payment */}
               <div className="lo-total">
                 <span>Total</span>
-                <strong>₹{order.total_amount}</strong>
+                <strong>₹{order.total}</strong>
               </div>
 
               <div className="lo-payment">
