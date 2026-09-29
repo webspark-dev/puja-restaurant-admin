@@ -1,0 +1,227 @@
+/* ============================================
+   frontend-admin/src/pages/LiveOrders.css
+   ============================================ */
+
+.lo-container {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.lo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.lo-header h1 {
+  font-size: 24px;
+  color: #111827;
+}
+
+.lo-count {
+  background: #dc2626;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.lo-loading,
+.lo-error,
+.lo-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6b7280;
+  font-size: 16px;
+}
+
+.lo-error { color: #dc2626; }
+
+.lo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+/* ---- Card ---- */
+.lo-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-left: 4px solid #f59e0b;
+}
+
+.lo-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.lo-card-header h3 {
+  font-size: 18px;
+  color: #111827;
+  margin: 0;
+}
+
+.lo-time {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.lo-status {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+  letter-spacing: 0.5px;
+}
+
+/* ---- Customer ---- */
+.lo-customer {
+  padding: 10px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.lo-customer p {
+  margin: 4px 0;
+  font-size: 14px;
+  color: #374151;
+}
+
+/* ---- Items ---- */
+.lo-items {
+  padding: 10px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.lo-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  color: #4b5563;
+  padding: 3px 0;
+}
+
+/* ---- Total ---- */
+.lo-total {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  font-size: 16px;
+  color: #111827;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.lo-total strong {
+  font-size: 18px;
+  color: #dc2626;
+}
+
+/* ---- Payment ---- */
+.lo-payment {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+}
+
+.lo-pay-badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.lo-pay-badge.cash {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.lo-pay-badge.online {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.cash-ok {
+  color: #10b981;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cash-pending {
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ---- Actions ---- */
+.lo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.btn-status {
+  flex: 1 1 auto;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: white;
+}
+
+.btn-confirm  { background: #3b82f6; }
+.btn-prepare  { background: #8b5cf6; }
+.btn-ready    { background: #10b981; }
+.btn-complete { background: #6b7280; }
+
+.btn-status:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+
+.btn-status:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ---- Cash Settle Button ---- */
+.btn-cash-settle {
+  flex: 1 1 100%;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 8px;
+  animation: pulse-green 2s infinite;
+  transition: all 0.2s;
+}
+
+.btn-cash-settle:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.5);
+}
+
+.btn-cash-settle:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
+  50%      { box-shadow: 0 4px 20px rgba(16, 185, 129, 0.8); }
+}
