@@ -1,26 +1,20 @@
 // ============================================
 // frontend-admin/src/utils/printBill.js
-// Clean Bill Printing Utility
+// 80mm Thermal Bill Printing Utility
 // ============================================
 
-/**
- * Print a clean bill for an order
- * @param {Object} order - Order object with items, customer, etc.
- * @param {Object} restaurant - Restaurant details (optional)
- */
 export function printBill(order, restaurant = {}) {
   const restaurantInfo = {
     name: restaurant.name || 'PUJA RESTAURANT',
     tagline: restaurant.tagline || 'Good Food • Happy Mood',
-    address: restaurant.address || 'Contai, Purba Medinipur, West Bengal - 721401',
+    address: restaurant.address || 'Contai, Purba Medinipur, WB - 721401',
     phone: restaurant.phone || '+91 9876543210',
     gstin: restaurant.gstin || '',
     fssai: restaurant.fssai || ''
   };
 
-  // Format items
   const items = order.items || [];
-  const itemsHTML = items.map((item, i) => {
+  const itemsHTML = items.map((item) => {
     const name = item.item_name || item.name || 'Item';
     const qty = item.quantity || 1;
     const price = item.price || 0;
@@ -28,10 +22,10 @@ export function printBill(order, restaurant = {}) {
 
     return `
       <tr>
-        <td style="padding: 4px 0; border-bottom: 1px dotted #ccc;">${i + 1}. ${name}</td>
-        <td style="text-align: center; padding: 4px 0; border-bottom: 1px dotted #ccc;">${qty}</td>
-        <td style="text-align: right; padding: 4px 0; border-bottom: 1px dotted #ccc;">₹${price.toFixed(2)}</td>
-        <td style="text-align: right; padding: 4px 0; border-bottom: 1px dotted #ccc;">₹${total.toFixed(2)}</td>
+        <td style="padding:2px 0;">${name}</td>
+        <td style="text-align:center; padding:2px 0;">${qty}</td>
+        <td style="text-align:right; padding:2px 0;">${price.toFixed(0)}</td>
+        <td style="text-align:right; padding:2px 0;">${total.toFixed(0)}</td>
       </tr>
     `;
   }).join('');
@@ -44,18 +38,13 @@ export function printBill(order, restaurant = {}) {
 
   const billNo = order.bill_no || order.bill_number || `INV-${Date.now().toString().slice(-6)}`;
   const date = new Date(order.created_at || Date.now());
-  const dateStr = date.toLocaleDateString('en-IN', { 
-    day: '2-digit', month: '2-digit', year: 'numeric' 
-  });
-  const timeStr = date.toLocaleTimeString('en-IN', { 
-    hour: '2-digit', minute: '2-digit' 
-  });
+  const dateStr = date.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const timeStr = date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
   const paymentMethod = (order.payment_method || 'cash').toUpperCase();
   const cashReceived = order.cash_received || total;
-  const changeReturned = order.change_returned || (cashReceived - total);
+  const changeReturned = order.change_returned || Math.max(0, cashReceived - total);
 
-  // Build the HTML
   const billHTML = `
 <!DOCTYPE html>
 <html>
@@ -63,120 +52,173 @@ export function printBill(order, restaurant = {}) {
   <meta charset="UTF-8">
   <title>Bill - ${order.token}</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: 'Courier New', monospace;
-      font-size: 12px;
+    @page {
+      size: 80mm auto;
+      margin: 0;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 80mm;
+      max-width: 80mm;
+      font-family: 'Courier New', 'Lucida Console', monospace;
+      font-size: 11px;
+      line-height: 1.3;
       color: #000;
       background: #fff;
-      padding: 10px;
     }
-    .bill {
-      max-width: 80mm;
-      margin: 0 auto;
-      padding: 10px;
+
+    body {
+      padding: 2mm;
     }
-    .center { text-align: center; }
-    .bold { font-weight: bold; }
-    .big { font-size: 16px; }
-    .huge { font-size: 22px; }
+
+    .header-title {
+      font-size: 16px;
+      font-weight: 900;
+      text-align: center;
+      letter-spacing: 1px;
+    }
+
+    .header-sub {
+      font-size: 9px;
+      text-align: center;
+      margin-top: 1px;
+    }
+
     .divider {
       border-top: 1px dashed #000;
-      margin: 6px 0;
+      margin: 3px 0;
     }
-    .double-divider {
-      border-top: 2px solid #000;
-      margin: 6px 0;
+
+    .solid-divider {
+      border-top: 1px solid #000;
+      margin: 3px 0;
     }
+
     .row {
       display: flex;
       justify-content: space-between;
-      margin: 2px 0;
+      font-size: 10px;
+      margin: 1px 0;
     }
+
+    .bold { font-weight: bold; }
+
     table {
       width: 100%;
       border-collapse: collapse;
-      margin: 6px 0;
+      font-size: 10px;
+      margin: 3px 0;
     }
+
     th {
       text-align: left;
-      padding: 4px 0;
+      padding: 2px 0;
       border-bottom: 1px solid #000;
-      font-size: 11px;
+      font-size: 10px;
+      font-weight: 700;
     }
-    th:nth-child(2), td:nth-child(2) { text-align: center; }
-    th:nth-child(3), td:nth-child(3),
-    th:nth-child(4), td:nth-child(4) { text-align: right; }
+
+    th:nth-child(2), td:nth-child(2) { text-align: center; width: 15%; }
+    th:nth-child(3), td:nth-child(3) { text-align: right; width: 20%; }
+    th:nth-child(4), td:nth-child(4) { text-align: right; width: 20%; }
+
     .token-box {
       border: 2px solid #000;
-      padding: 8px;
+      padding: 4px;
       text-align: center;
-      margin: 10px 0;
+      margin: 4px 0;
     }
+
     .token-label {
-      font-size: 10px;
+      font-size: 9px;
       letter-spacing: 2px;
+      font-weight: 700;
     }
+
     .token-value {
-      font-size: 36px;
+      font-size: 32px;
       font-weight: 900;
-      letter-spacing: 4px;
+      letter-spacing: 3px;
+      line-height: 1;
+      margin: 2px 0;
     }
+
+    .total-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+      font-weight: 900;
+      padding: 2px 0;
+    }
+
     .footer {
       text-align: center;
-      margin-top: 10px;
-      padding-top: 10px;
+      margin-top: 6px;
+      padding-top: 6px;
       border-top: 1px dashed #000;
-      font-size: 11px;
+      font-size: 10px;
     }
+
     @media print {
-      body { padding: 0; }
-      .bill { max-width: 100%; }
-      @page { margin: 5mm; size: 80mm auto; }
+      html, body {
+        width: 80mm;
+        max-width: 80mm;
+        padding: 0;
+        margin: 0;
+      }
+      body { padding: 1mm; }
+    }
+
+    @media screen {
+      body {
+        margin: 0 auto;
+        background: #f5f5f5;
+        padding: 20px;
+      }
+      .bill-wrapper {
+        width: 80mm;
+        background: #fff;
+        padding: 4mm;
+        margin: 0 auto;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        min-height: 100vh;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="bill">
+  <div class="bill-wrapper">
 
-    <!-- Header -->
-    <div class="center">
-      <div class="bold big">${restaurantInfo.name}</div>
-      <div style="font-size: 10px; font-style: italic; margin-top: 2px;">
-        ${restaurantInfo.tagline}
-      </div>
-      <div style="font-size: 10px; margin-top: 4px;">
-        ${restaurantInfo.address}
-      </div>
-      <div style="font-size: 10px;">
-        Phone: ${restaurantInfo.phone}
-      </div>
-      ${restaurantInfo.gstin ? `<div style="font-size: 10px;">GSTIN: ${restaurantInfo.gstin}</div>` : ''}
-      ${restaurantInfo.fssai ? `<div style="font-size: 10px;">FSSAI: ${restaurantInfo.fssai}</div>` : ''}
-    </div>
+    <div class="header-title">${restaurantInfo.name}</div>
+    <div class="header-sub" style="font-style:italic;">${restaurantInfo.tagline}</div>
+    <div class="header-sub">${restaurantInfo.address}</div>
+    <div class="header-sub">Ph: ${restaurantInfo.phone}</div>
+    ${restaurantInfo.gstin ? `<div class="header-sub">GSTIN: ${restaurantInfo.gstin}</div>` : ''}
 
-    <div class="divider"></div>
+    <div class="solid-divider"></div>
 
-    <!-- Bill Info -->
     <div class="row"><span>Bill No:</span><span class="bold">${billNo}</span></div>
     <div class="row"><span>Date:</span><span>${dateStr}</span></div>
     <div class="row"><span>Time:</span><span>${timeStr}</span></div>
     <div class="row"><span>Order ID:</span><span>${order.order_number || '—'}</span></div>
 
-    <!-- Token Box -->
     <div class="token-box">
       <div class="token-label">TOKEN NO</div>
       <div class="token-value">${order.token || '—'}</div>
     </div>
 
-    <!-- Customer -->
     <div class="row"><span>Customer:</span><span class="bold">${order.customer_name || 'Guest'}</span></div>
     <div class="row"><span>Mobile:</span><span>${order.customer_mobile || '—'}</span></div>
     <div class="row"><span>Type:</span><span>${(order.order_type || 'dinein') === 'dinein' ? 'DINE-IN' : 'TAKEAWAY'}</span></div>
 
     <div class="divider"></div>
 
-    <!-- Items Table -->
     <table>
       <thead>
         <tr>
@@ -187,43 +229,38 @@ export function printBill(order, restaurant = {}) {
         </tr>
       </thead>
       <tbody>
-        ${itemsHTML || '<tr><td colspan="4" style="text-align:center; padding: 10px;">No items</td></tr>'}
+        ${itemsHTML || '<tr><td colspan="4" style="text-align:center;padding:6px;">No items</td></tr>'}
       </tbody>
     </table>
 
     <div class="divider"></div>
 
-    <!-- Totals -->
-    <div class="row"><span>Subtotal:</span><span>₹${subtotal.toFixed(2)}</span></div>
+    <div class="row"><span>Subtotal</span><span>₹${subtotal.toFixed(2)}</span></div>
     ${gst > 0 ? `
-      <div class="row"><span>CGST @ 2.5%:</span><span>₹${cgst}</span></div>
-      <div class="row"><span>SGST @ 2.5%:</span><span>₹${sgst}</span></div>
+      <div class="row"><span>CGST @ 2.5%</span><span>₹${cgst}</span></div>
+      <div class="row"><span>SGST @ 2.5%</span><span>₹${sgst}</span></div>
     ` : ''}
 
-    <div class="double-divider"></div>
-    <div class="row bold big">
-      <span>GRAND TOTAL:</span>
+    <div class="solid-divider"></div>
+    <div class="total-row">
+      <span>GRAND TOTAL</span>
       <span>₹${total.toFixed(2)}</span>
     </div>
-    <div class="double-divider"></div>
+    <div class="solid-divider"></div>
 
-    <!-- Payment -->
-    <div style="margin-top: 8px;">
-      <div class="row"><span>Payment:</span><span class="bold">${paymentMethod}</span></div>
+    <div style="margin-top:4px;">
+      <div class="row"><span>Payment</span><span class="bold">${paymentMethod}</span></div>
       ${paymentMethod === 'CASH' ? `
-        <div class="row"><span>Cash Received:</span><span>₹${cashReceived.toFixed(2)}</span></div>
-        <div class="row"><span>Change Returned:</span><span>₹${changeReturned.toFixed(2)}</span></div>
+        <div class="row"><span>Received</span><span>₹${cashReceived.toFixed(2)}</span></div>
+        <div class="row"><span>Change</span><span>₹${changeReturned.toFixed(2)}</span></div>
       ` : ''}
-      <div class="row bold"><span>Status:</span><span>✅ PAID</span></div>
+      <div class="row bold"><span>Status</span><span>✅ PAID</span></div>
     </div>
 
-    <!-- Footer -->
     <div class="footer">
-      <div class="bold">THANK YOU!</div>
-      <div style="margin-top: 2px;">Visit Again 🙏</div>
-      <div style="margin-top: 8px; font-size: 10px;">
-        www.pujarestaurant.com
-      </div>
+      <div class="bold" style="font-size:12px;">THANK YOU!</div>
+      <div style="margin-top:2px;">Visit Again 🙏</div>
+      <div style="margin-top:4px;font-size:9px;">www.pujarestaurant.com</div>
     </div>
 
   </div>
@@ -232,20 +269,24 @@ export function printBill(order, restaurant = {}) {
     window.onload = function() {
       setTimeout(function() {
         window.print();
-        setTimeout(function() { window.close(); }, 100);
-      }, 200);
+      }, 300);
+    };
+    window.onafterprint = function() {
+      setTimeout(function() { window.close(); }, 200);
     };
   </script>
 </body>
 </html>
   `;
 
-  // Open in new window (hidden iframe approach doesn't work well for print)
-  const printWindow = window.open('', '_blank', 'width=400,height=600');
+  const printWindow = window.open('', '_blank', 'width=340,height=700,scrollbars=yes,resizable=yes');
+
   if (!printWindow) {
-    alert('❌ Please allow popups for this site to print bills');
+    alert('❌ Please allow popups to print bills');
     return;
   }
+
+  printWindow.document.open();
   printWindow.document.write(billHTML);
   printWindow.document.close();
 }

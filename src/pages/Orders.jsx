@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import { ordersAPI } from '../services/api';
 import { connectSocket } from '../services/socket';
 import { printBill } from '../utils/printBill';
+
 export default function Orders() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('live');
@@ -15,8 +16,11 @@ export default function Orders() {
   const [toast, setToast] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
   const [confirmModal, setConfirmModal] = useState(null);
-  // confirmModal structure: { type: 'cash' | 'print', order: {...} }
+  // confirmModal: { type: 'cash' | 'print', order: {...} }
 
+  // ============================================
+  // Data Loading
+  // ============================================
   useEffect(() => {
     loadData();
 
@@ -42,6 +46,32 @@ export default function Orders() {
       return () => clearTimeout(timer);
     }
   }, [toast]);
+
+  // ============================================
+  // ⌨️ Keyboard Shortcuts for Confirm Modal
+  // ============================================
+  useEffect(() => {
+    if (!confirmModal) return;
+
+    const handleKeyPress = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (confirmModal.type === 'cash') {
+          confirmCashPayment();
+        } else {
+          confirmPrintBill();
+        }
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setConfirmModal(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirmModal]);
 
   const loadData = async () => {
     try {
@@ -97,35 +127,36 @@ export default function Orders() {
     setConfirmModal({ type: 'print', order });
   };
 
- const confirmPrintBill = async () => {
-  const order = confirmModal.order;
-  setConfirmModal(null);
-  setUpdatingId(order.id);
+  const confirmPrintBill = async () => {
+    const order = confirmModal.order;
+    setConfirmModal(null);
+    setUpdatingId(order.id);
 
-  try {
-    const res = await ordersAPI.printBill(order.id);
-    if (res.data.success) {
-      // ✅ Use clean bill printer instead of window.print()
-      setTimeout(() => {
-        printBill(res.data.order || order);
-      }, 300);
+    try {
+      const res = await ordersAPI.printBill(order.id);
+      if (res.data.success) {
+        // ✅ Clean 80mm bill print
+        setTimeout(() => {
+          printBill(res.data.order || order);
+        }, 300);
 
+        setToast({
+          type: 'success',
+          message: `🖨️ ${order.token} — Bill Printed`
+        });
+        await loadData();
+      }
+    } catch (err) {
+      console.error('printBill error:', err);
       setToast({
-        type: 'success',
-        message: `🖨️ ${order.token} — Bill Printed`
+        type: 'error',
+        message: err.response?.data?.error || 'Failed to print bill'
       });
-      await loadData();
+    } finally {
+      setUpdatingId(null);
     }
-  } catch (err) {
-    console.error('printBill error:', err);
-    setToast({
-      type: 'error',
-      message: err.response?.data?.error || 'Failed to print bill'
-    });
-  } finally {
-    setUpdatingId(null);
-  }
-};
+  };
+
   // ============================================
   // STEP 3: Update Status
   // ============================================
@@ -271,7 +302,7 @@ export default function Orders() {
         ))}
       </div>
 
-      {/* Orders */}
+      {/* Orders List */}
       {displayOrders.length === 0 ? (
         <div style={{
           background: '#fff',
@@ -286,7 +317,6 @@ export default function Orders() {
         displayOrders.map(order => {
           const isUpdating = updatingId === order.id;
 
-          // 3 States within same card
           const isCashPending =
             order.payment_method === 'cash' &&
             order.is_cash_settled === false;
@@ -391,21 +421,17 @@ export default function Orders() {
                 </span>
               </div>
 
-              {/* Action Buttons */}
+              {/* Actions */}
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
 
                 <button
                   onClick={() => setSelectedOrder(order)}
                   disabled={isUpdating}
                   style={{
-                    flex: 1,
-                    padding: '10px',
-                    background: '#f0f0f0',
-                    color: '#333',
-                    borderRadius: '8px',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    border: 'none',
+                    flex: 1, padding: '10px',
+                    background: '#f0f0f0', color: '#333',
+                    borderRadius: '8px', fontSize: '13px',
+                    fontWeight: '700', border: 'none',
                     cursor: isUpdating ? 'not-allowed' : 'pointer',
                     minWidth: '80px'
                   }}
@@ -413,19 +439,16 @@ export default function Orders() {
                   👁️ View
                 </button>
 
-                {/* STATE 1: Confirm Cash Payment */}
+                {/* STATE 1: Confirm Cash */}
                 {isCashPending && (
                   <button
                     onClick={() => handleCashPay(order)}
                     disabled={isUpdating}
                     style={{
-                      flex: 2,
-                      padding: '10px',
+                      flex: 2, padding: '10px',
                       background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
-                      color: '#fff',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      fontWeight: '800',
+                      color: '#fff', borderRadius: '8px',
+                      fontSize: '13px', fontWeight: '800',
                       border: 'none',
                       cursor: isUpdating ? 'not-allowed' : 'pointer',
                       animation: 'pulse 2s infinite',
@@ -443,13 +466,10 @@ export default function Orders() {
                     onClick={() => handlePrintBill(order)}
                     disabled={isUpdating}
                     style={{
-                      flex: 2,
-                      padding: '10px',
+                      flex: 2, padding: '10px',
                       background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-                      color: '#fff',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      fontWeight: '800',
+                      color: '#fff', borderRadius: '8px',
+                      fontSize: '13px', fontWeight: '800',
                       border: 'none',
                       cursor: isUpdating ? 'not-allowed' : 'pointer',
                       animation: 'pulse 2s infinite',
@@ -467,14 +487,10 @@ export default function Orders() {
                     onClick={() => handleUpdateStatus(order.id, 'PREPARING')}
                     disabled={isUpdating}
                     style={{
-                      flex: 2,
-                      padding: '10px',
-                      background: '#2563eb',
-                      color: '#fff',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      fontWeight: '700',
-                      border: 'none',
+                      flex: 2, padding: '10px',
+                      background: '#2563eb', color: '#fff',
+                      borderRadius: '8px', fontSize: '13px',
+                      fontWeight: '700', border: 'none',
                       cursor: isUpdating ? 'not-allowed' : 'pointer',
                       minWidth: '140px'
                     }}
@@ -488,14 +504,10 @@ export default function Orders() {
                     onClick={() => handleUpdateStatus(order.id, 'READY')}
                     disabled={isUpdating}
                     style={{
-                      flex: 2,
-                      padding: '10px',
-                      background: '#16a34a',
-                      color: '#fff',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      fontWeight: '700',
-                      border: 'none',
+                      flex: 2, padding: '10px',
+                      background: '#16a34a', color: '#fff',
+                      borderRadius: '8px', fontSize: '13px',
+                      fontWeight: '700', border: 'none',
                       cursor: isUpdating ? 'not-allowed' : 'pointer',
                       minWidth: '140px'
                     }}
@@ -509,14 +521,10 @@ export default function Orders() {
                     onClick={() => handleUpdateStatus(order.id, 'COMPLETED')}
                     disabled={isUpdating}
                     style={{
-                      flex: 2,
-                      padding: '10px',
-                      background: '#16a34a',
-                      color: '#fff',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      fontWeight: '700',
-                      border: 'none',
+                      flex: 2, padding: '10px',
+                      background: '#16a34a', color: '#fff',
+                      borderRadius: '8px', fontSize: '13px',
+                      fontWeight: '700', border: 'none',
                       cursor: isUpdating ? 'not-allowed' : 'pointer',
                       minWidth: '140px'
                     }}
@@ -533,18 +541,18 @@ export default function Orders() {
 
       {/* Order Detail Modal */}
       {selectedOrder && (
-       <OrderDetailModal
-  order={selectedOrder}
-  onClose={() => setSelectedOrder(null)}
-  onPrint={() => {
-    setSelectedOrder(null);
-    printBill(selectedOrder);   // ✅ Clean bill
-  }}
-/>
+        <OrderDetailModal
+          order={selectedOrder}
+          onClose={() => setSelectedOrder(null)}
+          onPrint={() => {
+            setSelectedOrder(null);
+            handlePrintBill(selectedOrder);
+          }}
+        />
       )}
 
       {/* ============================================
-          🎯 Custom Confirm Modal (Cash / Print)
+          🎯 Custom Confirm Modal
          ============================================ */}
       {confirmModal && (
         <div
@@ -574,10 +582,7 @@ export default function Orders() {
             }}
           >
             {/* Icon + Title */}
-            <div style={{
-              padding: '28px 24px 16px',
-              textAlign: 'center'
-            }}>
+            <div style={{ padding: '28px 24px 16px', textAlign: 'center' }}>
               <div style={{
                 width: '72px',
                 height: '72px',
@@ -604,9 +609,7 @@ export default function Orders() {
                 color: '#1a1a1a',
                 marginBottom: '8px'
               }}>
-                {confirmModal.type === 'cash'
-                  ? 'Confirm Cash Payment?'
-                  : 'Print Bill?'}
+                {confirmModal.type === 'cash' ? 'Confirm Cash Payment?' : 'Print Bill?'}
               </h2>
 
               <p style={{
@@ -620,39 +623,23 @@ export default function Orders() {
                   : 'Bill will print and customer tracking will start.'}
               </p>
 
-              {/* Order Info */}
               <div style={{
                 background: '#f9fafb',
                 borderRadius: '12px',
                 padding: '16px',
                 textAlign: 'left'
               }}>
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  marginBottom: '8px',
-                  fontSize: '13px'
-                }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
                   <span style={{ color: '#666' }}>Token</span>
                   <span style={{ fontWeight: '800', color: '#e23744', fontSize: '16px' }}>
                     {confirmModal.order.token}
                   </span>
                 </div>
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  marginBottom: '8px',
-                  fontSize: '13px'
-                }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
                   <span style={{ color: '#666' }}>Customer</span>
                   <span style={{ fontWeight: '600' }}>{confirmModal.order.customer_name}</span>
                 </div>
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  marginBottom: '8px',
-                  fontSize: '13px'
-                }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
                   <span style={{ color: '#666' }}>Mobile</span>
                   <span style={{ fontWeight: '600' }}>{confirmModal.order.customer_mobile}</span>
                 </div>
@@ -671,52 +658,69 @@ export default function Orders() {
               </div>
             </div>
 
-            {/* Buttons */}
+            {/* Keyboard Hint */}
             <div style={{
-              display: 'flex',
-              gap: '10px',
-              padding: '16px 24px 24px'
+              padding: '0 24px 8px',
+              textAlign: 'center',
+              fontSize: '11px',
+              color: '#999'
             }}>
+              💡 Press{' '}
+              <kbd style={{
+                background: '#f0f0f0',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                padding: '1px 6px',
+                fontFamily: 'monospace',
+                fontWeight: '700',
+                color: '#333'
+              }}>Enter</kbd>{' '}
+              to confirm or{' '}
+              <kbd style={{
+                background: '#f0f0f0',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                padding: '1px 6px',
+                fontFamily: 'monospace',
+                fontWeight: '700',
+                color: '#333'
+              }}>Esc</kbd>{' '}
+              to cancel
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: '10px', padding: '8px 24px 24px' }}>
               <button
                 onClick={() => setConfirmModal(null)}
                 style={{
-                  flex: 1,
-                  padding: '14px',
-                  background: '#f0f0f0',
-                  color: '#333',
-                  border: 'none',
-                  borderRadius: '12px',
-                  fontSize: '14px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s'
+                  flex: 1, padding: '14px',
+                  background: '#f0f0f0', color: '#333',
+                  border: 'none', borderRadius: '12px',
+                  fontSize: '14px', fontWeight: '700',
+                  cursor: 'pointer'
                 }}
               >
                 ❌ Cancel
               </button>
 
               <button
+                autoFocus
                 onClick={
                   confirmModal.type === 'cash'
                     ? confirmCashPayment
                     : confirmPrintBill
                 }
                 style={{
-                  flex: 2,
-                  padding: '14px',
+                  flex: 2, padding: '14px',
                   background: confirmModal.type === 'cash'
                     ? 'linear-gradient(135deg, #dc2626, #b91c1c)'
                     : 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '12px',
-                  fontSize: '14px',
-                  fontWeight: '800',
-                  cursor: 'pointer',
+                  color: '#fff', border: 'none',
+                  borderRadius: '12px', fontSize: '14px',
+                  fontWeight: '800', cursor: 'pointer',
                   boxShadow: confirmModal.type === 'cash'
                     ? '0 4px 12px rgba(220, 38, 38, 0.4)'
-                    : '0 4px 12px rgba(37, 99, 235, 0.4)',
-                  transition: 'all 0.15s'
+                    : '0 4px 12px rgba(37, 99, 235, 0.4)'
                 }}
               >
                 {confirmModal.type === 'cash' ? '✅ Yes, Confirm' : '🖨️ Yes, Print'}
